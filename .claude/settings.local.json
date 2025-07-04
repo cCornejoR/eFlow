@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(rm:*)",
+      "Bash(mkdir:*)",
+      "Bash(python:*)",
+      "Bash(ls:*)",
+      "Bash(powershell.exe:*)",
+      "WebFetch(domain:pyo3.rs)",
+      "Bash(./FIX_DEFINITIVO.bat)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(npm run tauri:*)",
+      "Bash(uv sync:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm install)",
+      "Bash(cargo --version)",
+      "Bash(npm run dev:*)",
+      "Bash(uv venv:*)",
+      "Bash(.venv/Scripts/activate)",
+      "Bash(pip install:*)"
+    ],
+    "deny": []
+  }
+}
