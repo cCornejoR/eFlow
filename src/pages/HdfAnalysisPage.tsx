@@ -680,6 +680,7 @@ export function HdfAnalysisPage({ onBackToHome }: HdfAnalysisPageProps) {
                     </div>
                   </CardContent>
                 </Card>
+              </div>
             ) : (
               <Card>
                 <CardContent className="flex items-center justify-center py-12">
