@@ -13,6 +13,7 @@ import {
   Download,
   Settings,
   Database,
+  FileText,
 } from "lucide-react";
 import { Button } from "./ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/Card";
@@ -24,6 +25,7 @@ import {
   VtkDataResponse,
 } from "../lib/tauri-commands";
 import { HdfDataViewer } from "./HdfDataViewer";
+import { RasCommanderDataViewer } from "./RasCommanderDataViewer";
 
 interface VtkViewerProps {
   data: VtkViewerData | null;
@@ -35,8 +37,9 @@ interface VtkViewerState {
   error: string | null;
   vtkInitialized: boolean;
   hdfStructure: any | null;
-  currentView: "structure" | "vtk";
+  currentView: "structure" | "vtk" | "ras_commander";
   vtkData: VtkDataResponse | null;
+  useRasCommander: boolean;
 }
 
 export function VtkViewer({ data, onClearSelection }: VtkViewerProps) {
@@ -46,8 +49,9 @@ export function VtkViewer({ data, onClearSelection }: VtkViewerProps) {
     error: null,
     vtkInitialized: false,
     hdfStructure: null,
-    currentView: "structure",
+    currentView: "ras_commander",
     vtkData: null,
+    useRasCommander: true,
   });
 
   // Initialize VTK when component mounts
@@ -182,18 +186,50 @@ export function VtkViewer({ data, onClearSelection }: VtkViewerProps) {
           </div>
 
           <div className="flex items-center space-x-2">
-            {/* View Toggle */}
-            {state.currentView === "vtk" && (
+            {/* View Toggle Buttons */}
+            <div className="flex items-center space-x-1 bg-muted rounded-lg p-1">
               <Button
-                variant="outline"
+                variant={
+                  state.currentView === "ras_commander" ? "default" : "ghost"
+                }
                 size="sm"
-                onClick={handleBackToStructure}
-                title="Back to Structure"
+                onClick={() =>
+                  setState((prev) => ({
+                    ...prev,
+                    currentView: "ras_commander",
+                  }))
+                }
+                title="RAS Commander View"
               >
-                <Database className="h-4 w-4 mr-2" />
+                <Database className="h-4 w-4 mr-1" />
+                RAS Data
+              </Button>
+              <Button
+                variant={
+                  state.currentView === "structure" ? "default" : "ghost"
+                }
+                size="sm"
+                onClick={() =>
+                  setState((prev) => ({ ...prev, currentView: "structure" }))
+                }
+                title="Basic Structure View"
+              >
+                <FileText className="h-4 w-4 mr-1" />
                 Structure
               </Button>
-            )}
+              <Button
+                variant={state.currentView === "vtk" ? "default" : "ghost"}
+                size="sm"
+                onClick={() =>
+                  setState((prev) => ({ ...prev, currentView: "vtk" }))
+                }
+                title="VTK Visualization"
+                disabled={!state.vtkData}
+              >
+                <Move3D className="h-4 w-4 mr-1" />
+                3D View
+              </Button>
+            </div>
 
             {/* VTK Controls - only show in VTK view */}
             {state.currentView === "vtk" && (
@@ -271,7 +307,13 @@ export function VtkViewer({ data, onClearSelection }: VtkViewerProps) {
           )}
 
           {/* Content based on current view */}
-          {state.currentView === "structure" && state.hdfStructure ? (
+          {state.currentView === "ras_commander" ? (
+            <RasCommanderDataViewer
+              filePath={data.filename}
+              fileName={data.filename}
+              onClose={onClearSelection}
+            />
+          ) : state.currentView === "structure" && state.hdfStructure ? (
             <HdfDataViewer
               filePath={data.filename}
               structureData={state.hdfStructure}

@@ -10,12 +10,14 @@ import {
   Sun,
   Moon,
   Home,
+  Database,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "./ui/Button";
 import { Alert, AlertDescription } from "./ui/Alert";
 import { ProjectSidebar } from "./ProjectSidebar";
 import { VtkViewer } from "./VtkViewer";
+import { HDF_Explorer } from "./HDF_Explorer";
 import { useTheme } from "../contexts/ThemeContext";
 import { useRasCommanderNotifications } from "../hooks/use-ras-commander-notifications";
 import {
@@ -29,6 +31,7 @@ import {
   analyzeProjectStructure,
   checkRasCommanderStatus,
   initializeProject,
+  analyzeRasProjectStructure,
 } from "../lib/tauri-commands";
 
 interface eFlowViewerState {
@@ -37,6 +40,7 @@ interface eFlowViewerState {
   loading: boolean;
   error: string | null;
   rasStatus: RasCommanderStatus | null;
+  currentView: "project" | "hdf_explorer";
 }
 
 interface EFlowViewerProps {
@@ -52,6 +56,7 @@ export default function EFlowViewer({ onBackToHome }: EFlowViewerProps) {
     loading: false,
     error: null,
     rasStatus: null,
+    currentView: "project",
   });
 
   // Check ras-commander status on component mount
@@ -107,16 +112,56 @@ export default function EFlowViewer({ onBackToHome }: EFlowViewerProps) {
         return;
       }
 
-      // Analyze project structure
-      const projectData = await analyzeProjectStructure({
-        project_path: folderPath,
-      });
+      // Try to analyze with ras-commander first
+      let projectData;
+      try {
+        console.log("🚀 Analyzing project with ras-commander...");
+        const rasProjectData = await analyzeRasProjectStructure({
+          project_path: folderPath,
+          ras_version: "6.5",
+          include_detailed_hdf: true,
+        });
 
-      if (projectData.error) {
-        throw new Error(projectData.error);
+        if (rasProjectData.success && rasProjectData.tree_structure) {
+          console.log("✅ Successfully analyzed with ras-commander");
+          projectData = {
+            project_path: folderPath,
+            project_name: rasProjectData.tree_structure.name,
+            has_prj_file: true,
+            geometry_files: [],
+            plan_files: [],
+            unsteady_files: [],
+            other_files: [],
+            total_hdf_files: rasProjectData.metadata.total_hdf_files || 0,
+            ras_commander_available: true,
+            project_info: rasProjectData.project_info,
+            tree_structure: rasProjectData.tree_structure,
+            metadata: rasProjectData.metadata,
+            ras_commander_version: rasProjectData.ras_commander_version,
+            error: null,
+          };
+        } else {
+          throw new Error(
+            rasProjectData.error || "Failed to analyze with ras-commander"
+          );
+        }
+      } catch (rasError) {
+        console.warn(
+          "⚠️ ras-commander analysis failed, falling back to basic analysis:",
+          rasError
+        );
+
+        // Fallback to basic analysis
+        projectData = await analyzeProjectStructure({
+          project_path: folderPath,
+        });
+
+        if (projectData.error) {
+          throw new Error(projectData.error);
+        }
       }
 
-      // Initialize project with ras-commander
+      // Initialize project with ras-commander (optional)
       try {
         await initializeProject({ project_path: folderPath });
       } catch (initError) {
@@ -216,25 +261,45 @@ export default function EFlowViewer({ onBackToHome }: EFlowViewerProps) {
             </div>
           </div>
 
-          {/* Load Project Button */}
-          <Button
-            onClick={handleLoadProject}
-            disabled={state.loading}
-            className="w-full"
-            variant="default"
-          >
-            {state.loading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Loading...
-              </>
-            ) : (
-              <>
-                <FolderOpen className="mr-2 h-4 w-4" />
-                Load Project
-              </>
-            )}
-          </Button>
+          {/* View Toggle Buttons */}
+          <div className="space-y-2">
+            <Button
+              onClick={() => {
+                setState((prev) => ({ ...prev, currentView: "project" }));
+                if (state.currentView !== "project") {
+                  handleLoadProject();
+                }
+              }}
+              disabled={state.loading}
+              className="w-full"
+              variant={state.currentView === "project" ? "default" : "outline"}
+            >
+              {state.loading && state.currentView === "project" ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                <>
+                  <FolderOpen className="mr-2 h-4 w-4" />
+                  Load Project
+                </>
+              )}
+            </Button>
+
+            <Button
+              onClick={() =>
+                setState((prev) => ({ ...prev, currentView: "hdf_explorer" }))
+              }
+              className="w-full"
+              variant={
+                state.currentView === "hdf_explorer" ? "default" : "outline"
+              }
+            >
+              <Database className="mr-2 h-4 w-4" />
+              HDF Explorer
+            </Button>
+          </div>
 
           {/* Debug Button */}
           <Button
@@ -257,23 +322,37 @@ export default function EFlowViewer({ onBackToHome }: EFlowViewerProps) {
           </div>
         )}
 
-        {/* Project Sidebar */}
+        {/* Content based on current view */}
         <div className="flex-1 overflow-hidden">
-          {state.projectData ? (
-            <ProjectSidebar
-              projectData={state.projectData}
-              onFileSelect={handleFileSelect}
-              selectedFile={state.selectedFile}
-              onBackToHome={onBackToHome} // Pass down the function
-            />
+          {state.currentView === "project" ? (
+            state.projectData ? (
+              <ProjectSidebar
+                projectData={state.projectData}
+                onFileSelect={handleFileSelect}
+                selectedFile={state.selectedFile}
+                onBackToHome={onBackToHome}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground">
+                <div className="text-center">
+                  <FolderOpen className="mx-auto h-12 w-12 mb-4 opacity-50" />
+                  <p className="text-card-foreground">No project loaded</p>
+                  <p className="text-sm mt-1">
+                    Click "Load Project" to get started
+                  </p>
+                </div>
+              </div>
+            )
           ) : (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
-              <div className="text-center">
-                <FolderOpen className="mx-auto h-12 w-12 mb-4 opacity-50" />
-                <p className="text-card-foreground">No project loaded</p>
-                <p className="text-sm mt-1">
-                  Click "Load Project" to get started
-                </p>
+            <div className="h-full text-muted-foreground">
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center">
+                  <Database className="mx-auto h-12 w-12 mb-4 opacity-50" />
+                  <p className="text-card-foreground">HDF Explorer</p>
+                  <p className="text-sm mt-1">
+                    Switch to main content area for full HDF exploration
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -282,10 +361,14 @@ export default function EFlowViewer({ onBackToHome }: EFlowViewerProps) {
 
       {/* Right Viewer Area - 70% width */}
       <div className="flex-1 flex flex-col">
-        <VtkViewer
-          data={state.selectedFile}
-          onClearSelection={handleClearSelection}
-        />
+        {state.currentView === "project" ? (
+          <VtkViewer
+            data={state.selectedFile}
+            onClearSelection={handleClearSelection}
+          />
+        ) : (
+          <HDF_Explorer onBackToHome={onBackToHome} />
+        )}
       </div>
     </div>
   );

@@ -6,11 +6,22 @@ from pytauri import Commands, builder_factory, context_factory
 # Import command registration functions
 from .commands.basic_commands import register_basic_commands
 from .commands.hdf_commands import register_hdf_commands
+from .commands.hdf_explorer_commands import register_hdf_explorer_commands
 
 # Create commands instance and register all commands
+print("🚀 Initializing eFlow PyTauri commands...")
 ext_mod = Commands()
+
+print("📝 Registering basic commands...")
 register_basic_commands(ext_mod)
+
+print("📊 Registering HDF commands...")
 register_hdf_commands(ext_mod)
+
+print("🔍 Registering HDF Explorer commands...")
+register_hdf_explorer_commands(ext_mod)
+
+print("✅ All commands registered successfully!")
 
 
 def main() -> int:

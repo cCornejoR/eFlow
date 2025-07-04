@@ -44,6 +44,18 @@ export function TreeView({
   indent = 20,
   animateExpand = true,
 }: TreeViewProps) {
+  // Debug logging
+  console.log("🌲 TreeView received data:", data);
+
+  // Ensure data is valid
+  if (!data || !Array.isArray(data)) {
+    console.warn("⚠️ TreeView: Invalid data received", data);
+    return (
+      <div className="p-4 text-center text-muted-foreground">
+        <p>No tree data available</p>
+      </div>
+    );
+  }
   const [expandedIds, setExpandedIds] = useState<Set<string>>(
     new Set(defaultExpandedIds)
   );
@@ -217,14 +229,16 @@ export function TreeView({
                   delay: animateExpand ? 0.1 : 0,
                 }}
               >
-                {node.children!.map((child, index) =>
-                  renderNode(
-                    child,
-                    level + 1,
-                    index === node.children!.length - 1,
-                    currentPath
-                  )
-                )}
+                {node.children!.map((child, index) => (
+                  <div key={`${child.id}-${index}`}>
+                    {renderNode(
+                      child,
+                      level + 1,
+                      index === node.children!.length - 1,
+                      currentPath
+                    )}
+                  </div>
+                ))}
               </motion.div>
             </motion.div>
           )}
@@ -244,8 +258,16 @@ export function TreeView({
       transition={{ duration: 0.3, ease: "easeOut" }}
     >
       <div className="p-2">
-        {data.map((node, index) =>
-          renderNode(node, 0, index === data.length - 1)
+        {Array.isArray(data) ? (
+          data.map((node, index) => (
+            <div key={`root-${node.id}-${index}`}>
+              {renderNode(node, 0, index === data.length - 1)}
+            </div>
+          ))
+        ) : (
+          <div className="text-center text-muted-foreground py-4">
+            No data available
+          </div>
         )}
       </div>
     </motion.div>

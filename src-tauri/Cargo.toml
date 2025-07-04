@@ -20,6 +20,8 @@ name = "eFlow"
 path = "src/main.rs"
 required-features = ["pytauri/standalone"]
 
+
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -32,3 +34,7 @@ serde_json = "1"
 pyo3 = { version = "0.25" }
 pytauri = { version = "0.6", features = ["plugin-notification"] }
 tauri-plugin-pytauri = { version = "0.6" }
+anyhow = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+tokio = { version = "1.0", features = ["full"] }
+# hdf5 = "0.8"

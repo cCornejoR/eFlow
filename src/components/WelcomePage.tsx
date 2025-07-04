@@ -5,9 +5,13 @@ import BeamsComponent from "@/components/beams";
 
 interface WelcomePageProps {
   onEFlowViewer: () => void;
+  onHdfAnalysis: () => void;
 }
 
-export default function WelcomePage({ onEFlowViewer }: WelcomePageProps) {
+export default function WelcomePage({
+  onEFlowViewer,
+  onHdfAnalysis,
+}: WelcomePageProps) {
   return (
     <div className="h-screen overflow-hidden flex items-center justify-center relative">
       {/* Beams background */}
@@ -75,6 +79,24 @@ export default function WelcomePage({ onEFlowViewer }: WelcomePageProps) {
                   transition={{ duration: 1.5, repeat: Infinity }}
                 >
                   🚀
+                </motion.div>
+              </div>
+            </StarBorder>
+
+            <StarBorder
+              onClick={onHdfAnalysis}
+              speed="3s"
+              color="hsl(var(--secondary))"
+              className="font-medium shadow-lg"
+            >
+              <div className="inline-flex items-center">
+                HDF5 Analysis
+                <motion.div
+                  className="ml-2"
+                  animate={{ rotate: [0, 360] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                >
+                  📊
                 </motion.div>
               </div>
             </StarBorder>

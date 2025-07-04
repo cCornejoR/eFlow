@@ -24,10 +24,25 @@ from ..models.hdf_models import (
     HdfDatasetRequest,
     HdfDatasetResponse,
     VtkDataRequest,
-    VtkDataResponse
+    VtkDataResponse,
+    RasProjectStructureRequest,
+    RasProjectStructureResponse,
+    MeshDataRequest,
+    MeshDataResponse,
+    XsecDataRequest,
+    XsecDataResponse,
+    PlanSummaryRequest,
+    PlanSummaryResponse,
+    ComprehensiveHdfRequest,
+    ComprehensiveHdfResponse
 )
 from ..utils.hdf_utils import analyze_folder_for_hdf_files, get_ras_commander_status
 from ..utils.vtk_utils import prepare_hdf_for_vtk, detect_mesh_datasets, detect_result_datasets
+from ..utils.ras_commander_utils import (
+    create_comprehensive_project_tree,
+    extract_comprehensive_hdf_data,
+    RasProjectAnalyzer
+)
 
 # Try to import ras-commander for data extraction
 try:
@@ -765,3 +780,222 @@ def register_hdf_commands(commands: "Commands"):
             body.dataset_paths,
             body.result_type
         )
+
+    @commands.command()
+    async def analyze_ras_project_structure(body: RasProjectStructureRequest) -> RasProjectStructureResponse:
+        """Analyze RAS project structure using ras-commander."""
+        try:
+            if not RAS_COMMANDER_AVAILABLE:
+                return RasProjectStructureResponse(
+                    success=False,
+                    error="ras-commander library not available",
+                    metadata={"ras_commander_available": False}
+                )
+
+            if not os.path.exists(body.project_path):
+                return RasProjectStructureResponse(
+                    success=False,
+                    error=f"Project path does not exist: {body.project_path}"
+                )
+
+            # Create comprehensive project tree
+            tree_data = create_comprehensive_project_tree(body.project_path)
+
+            if not tree_data.get("success"):
+                return RasProjectStructureResponse(
+                    success=False,
+                    error=tree_data.get("error", "Failed to analyze project structure")
+                )
+
+            return RasProjectStructureResponse(
+                success=True,
+                tree_structure=tree_data.get("tree_structure"),
+                metadata=tree_data.get("metadata", {}),
+                ras_commander_version=tree_data.get("ras_commander_version")
+            )
+
+        except Exception as e:
+            return RasProjectStructureResponse(
+                success=False,
+                error=f"Unexpected error: {str(e)}"
+            )
+
+    @commands.command()
+    async def extract_mesh_data(body: MeshDataRequest) -> MeshDataResponse:
+        """Extract mesh data using ras-commander."""
+        try:
+            if not RAS_COMMANDER_AVAILABLE:
+                return MeshDataResponse(
+                    success=False,
+                    error="ras-commander library not available",
+                    data_type=body.data_type
+                )
+
+            if not os.path.exists(body.file_path):
+                return MeshDataResponse(
+                    success=False,
+                    error=f"File does not exist: {body.file_path}",
+                    data_type=body.data_type
+                )
+
+            analyzer = RasProjectAnalyzer(os.path.dirname(body.file_path))
+
+            if body.data_type == "timeseries" and body.mesh_name and body.variable:
+                result = analyzer.get_mesh_timeseries(body.file_path, body.mesh_name, body.variable)
+            elif body.data_type == "maximum":
+                result = analyzer.get_mesh_max_results(body.file_path)
+            else:
+                result = analyzer.get_mesh_data(body.file_path)
+
+            if result.get("success"):
+                return MeshDataResponse(
+                    success=True,
+                    mesh_name=body.mesh_name,
+                    variable=body.variable,
+                    data_type=body.data_type,
+                    data=result.get("data"),
+                    metadata=result
+                )
+            else:
+                return MeshDataResponse(
+                    success=False,
+                    error=result.get("error", "Failed to extract mesh data"),
+                    data_type=body.data_type
+                )
+
+        except Exception as e:
+            return MeshDataResponse(
+                success=False,
+                error=f"Unexpected error: {str(e)}",
+                data_type=body.data_type
+            )
+
+    @commands.command()
+    async def extract_xsec_data(body: XsecDataRequest) -> XsecDataResponse:
+        """Extract cross-section data using ras-commander."""
+        try:
+            if not RAS_COMMANDER_AVAILABLE:
+                return XsecDataResponse(
+                    success=False,
+                    error="ras-commander library not available"
+                )
+
+            if not os.path.exists(body.file_path):
+                return XsecDataResponse(
+                    success=False,
+                    error=f"File does not exist: {body.file_path}"
+                )
+
+            analyzer = RasProjectAnalyzer(os.path.dirname(body.file_path))
+            result = analyzer.get_xsec_results(body.file_path)
+
+            if result.get("success"):
+                return XsecDataResponse(
+                    success=True,
+                    xsec_data=result.get("xsec_data"),
+                    metadata=result
+                )
+            else:
+                return XsecDataResponse(
+                    success=False,
+                    error=result.get("error", "Failed to extract cross-section data")
+                )
+
+        except Exception as e:
+            return XsecDataResponse(
+                success=False,
+                error=f"Unexpected error: {str(e)}"
+            )
+
+    @commands.command()
+    async def extract_plan_summary(body: PlanSummaryRequest) -> PlanSummaryResponse:
+        """Extract plan summary data using ras-commander."""
+        try:
+            if not RAS_COMMANDER_AVAILABLE:
+                return PlanSummaryResponse(
+                    success=False,
+                    error="ras-commander library not available"
+                )
+
+            if not os.path.exists(body.file_path):
+                return PlanSummaryResponse(
+                    success=False,
+                    error=f"File does not exist: {body.file_path}"
+                )
+
+            analyzer = RasProjectAnalyzer(os.path.dirname(body.file_path))
+            result = analyzer.get_plan_runtime_data(body.file_path)
+
+            if result.get("success"):
+                return PlanSummaryResponse(
+                    success=True,
+                    runtime_data=result.get("runtime_data"),
+                    volume_accounting=result.get("volume_accounting"),
+                    metadata=result
+                )
+            else:
+                return PlanSummaryResponse(
+                    success=False,
+                    error=result.get("error", "Failed to extract plan summary")
+                )
+
+        except Exception as e:
+            return PlanSummaryResponse(
+                success=False,
+                error=f"Unexpected error: {str(e)}"
+            )
+
+    @commands.command()
+    async def extract_comprehensive_hdf(body: ComprehensiveHdfRequest) -> ComprehensiveHdfResponse:
+        """Extract comprehensive HDF data using ras-commander."""
+        try:
+            if not RAS_COMMANDER_AVAILABLE:
+                return ComprehensiveHdfResponse(
+                    success=False,
+                    file_path=body.file_path,
+                    filename=os.path.basename(body.file_path),
+                    data_type="comprehensive",
+                    error="ras-commander library not available"
+                )
+
+            if not os.path.exists(body.file_path):
+                return ComprehensiveHdfResponse(
+                    success=False,
+                    file_path=body.file_path,
+                    filename=os.path.basename(body.file_path),
+                    data_type="comprehensive",
+                    error=f"File does not exist: {body.file_path}"
+                )
+
+            # Determine data types to extract
+            data_types = body.data_types if body.data_types else ["auto"]
+            data_type = data_types[0] if len(data_types) == 1 else "multiple"
+
+            result = extract_comprehensive_hdf_data(body.file_path, data_type)
+
+            if result.get("success"):
+                return ComprehensiveHdfResponse(
+                    success=True,
+                    file_path=body.file_path,
+                    filename=os.path.basename(body.file_path),
+                    data_type=data_type,
+                    extracted_data=result.get("extracted_data", {}),
+                    metadata=result
+                )
+            else:
+                return ComprehensiveHdfResponse(
+                    success=False,
+                    file_path=body.file_path,
+                    filename=os.path.basename(body.file_path),
+                    data_type=data_type,
+                    error=result.get("error", "Failed to extract comprehensive data")
+                )
+
+        except Exception as e:
+            return ComprehensiveHdfResponse(
+                success=False,
+                file_path=body.file_path,
+                filename=os.path.basename(body.file_path),
+                data_type="comprehensive",
+                error=f"Unexpected error: {str(e)}"
+            )

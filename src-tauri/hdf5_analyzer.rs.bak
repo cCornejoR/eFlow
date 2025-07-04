@@ -1,0 +1,278 @@
+use anyhow::{Context, Result};
+use eFlow_lib::hdf5_analyzer::HDF5Analyzer;
+use std::env;
+use std::path::Path;
+
+fn main() -> Result<()> {
+    let args: Vec<String> = env::args().collect();
+    
+    if args.len() < 2 {
+        print_usage();
+        return Ok(());
+    }
+
+    let command = &args[1];
+    
+    match command.as_str() {
+        "info" => {
+            if args.len() < 3 {
+                eprintln!("Error: Se requiere la ruta del archivo HDF5");
+                print_usage();
+                return Ok(());
+            }
+            let file_path = &args[2];
+            analyze_file_info(file_path)?;
+        }
+        "structure" => {
+            if args.len() < 3 {
+                eprintln!("Error: Se requiere la ruta del archivo HDF5");
+                print_usage();
+                return Ok(());
+            }
+            let file_path = &args[2];
+            analyze_file_structure(file_path)?;
+        }
+        "datasets" => {
+            if args.len() < 3 {
+                eprintln!("Error: Se requiere la ruta del archivo HDF5");
+                print_usage();
+                return Ok(());
+            }
+            let file_path = &args[2];
+            list_datasets(file_path)?;
+        }
+        "hecras" => {
+            if args.len() < 3 {
+                eprintln!("Error: Se requiere la ruta del archivo HDF5");
+                print_usage();
+                return Ok(());
+            }
+            let file_path = &args[2];
+            analyze_hecras_data(file_path)?;
+        }
+        "sample" => {
+            if args.len() < 4 {
+                eprintln!("Error: Se requiere la ruta del archivo HDF5 y el path del dataset");
+                print_usage();
+                return Ok(());
+            }
+            let file_path = &args[2];
+            let dataset_path = &args[3];
+            let max_elements = if args.len() > 4 {
+                args[4].parse().unwrap_or(10)
+            } else {
+                10
+            };
+            read_dataset_sample(file_path, dataset_path, max_elements)?;
+        }
+        "help" | "--help" | "-h" => {
+            print_usage();
+        }
+        _ => {
+            eprintln!("Error: Comando desconocido '{}'", command);
+            print_usage();
+        }
+    }
+
+    Ok(())
+}
+
+fn print_usage() {
+    println!("HDF5 Analyzer - Herramienta para análisis de archivos HDF5 de HEC-RAS");
+    println!();
+    println!("USAGE:");
+    println!("    hdf5_analyzer <COMMAND> <FILE_PATH> [OPTIONS]");
+    println!();
+    println!("COMMANDS:");
+    println!("    info <file>                    Muestra información básica del archivo");
+    println!("    structure <file>               Muestra la estructura completa del archivo");
+    println!("    datasets <file>                Lista todos los datasets en el archivo");
+    println!("    hecras <file>                  Extrae datos específicos de HEC-RAS");
+    println!("    sample <file> <dataset> [n]    Lee una muestra de un dataset específico (n elementos, default: 10)");
+    println!("    help                           Muestra esta ayuda");
+    println!();
+    println!("EXAMPLES:");
+    println!("    hdf5_analyzer info \"C:\\path\\to\\file.hdf\"");
+    println!("    hdf5_analyzer structure \"C:\\path\\to\\file.hdf\"");
+    println!("    hdf5_analyzer datasets \"C:\\path\\to\\file.hdf\"");
+    println!("    hdf5_analyzer hecras \"C:\\path\\to\\file.hdf\"");
+    println!("    hdf5_analyzer sample \"C:\\path\\to\\file.hdf\" \"/Results/2D/MaxWSE\" 20");
+}
+
+fn analyze_file_info(file_path: &str) -> Result<()> {
+    println!("Analizando información del archivo: {}", file_path);
+    println!("=" .repeat(60));
+    
+    let info = HDF5Analyzer::get_file_info(file_path)
+        .with_context(|| format!("Error al analizar el archivo: {}", file_path))?;
+    
+    println!("Nombre: {}", info.name);
+    println!("Ruta: {}", info.path);
+    println!("Tamaño: {:.2} MB", info.size_mb);
+    println!("Modificado: {}", info.modified.format("%Y-%m-%d %H:%M:%S"));
+    println!("Accesible: {}", if info.accessible { "Sí" } else { "No" });
+    
+    if info.accessible {
+        println!("Grupos: {}", info.groups_count);
+        println!("Datasets: {}", info.datasets_count);
+    }
+    
+    if let Some(error) = info.error {
+        println!("Error: {}", error);
+    }
+    
+    Ok(())
+}
+
+fn analyze_file_structure(file_path: &str) -> Result<()> {
+    println!("Analizando estructura del archivo: {}", file_path);
+    println!("=" .repeat(60));
+    
+    let structure = HDF5Analyzer::get_file_structure(file_path)
+        .with_context(|| format!("Error al analizar la estructura: {}", file_path))?;
+    
+    println!("Archivo: {}", structure.file_path);
+    println!("Total de grupos: {}", structure.total_groups);
+    println!("Total de datasets: {}", structure.total_datasets);
+    println!();
+    
+    if let Some(error) = structure.error {
+        println!("Error: {}", error);
+        return Ok(());
+    }
+    
+    print_tree_node(&structure.root, 0);
+    
+    Ok(())
+}
+
+fn print_tree_node(node: &eFlow_lib::hdf5_analyzer::TreeNode, depth: usize) {
+    let indent = "  ".repeat(depth);
+    let icon = match node.node_type.as_str() {
+        "group" => "📁",
+        "dataset" => "📄",
+        _ => "❓",
+    };
+    
+    print!("{}{} {}", indent, icon, node.name);
+    
+    if node.node_type == "dataset" {
+        if let Some(shape) = &node.shape {
+            print!(" {:?}", shape);
+        }
+        if let Some(dtype) = &node.dtype {
+            print!(" ({})", dtype);
+        }
+    }
+    
+    println!();
+    
+    // Mostrar atributos si los hay
+    if !node.attributes.is_empty() && depth < 3 { // Limitar profundidad para evitar spam
+        for (key, value) in &node.attributes {
+            println!("{}  📋 {}: {}", indent, key, value);
+        }
+    }
+    
+    // Recursión para hijos
+    for child in &node.children {
+        print_tree_node(child, depth + 1);
+    }
+}
+
+fn list_datasets(file_path: &str) -> Result<()> {
+    println!("Listando datasets en: {}", file_path);
+    println!("=" .repeat(60));
+    
+    let datasets = HDF5Analyzer::list_datasets(file_path)
+        .with_context(|| format!("Error al listar datasets: {}", file_path))?;
+    
+    if datasets.is_empty() {
+        println!("No se encontraron datasets en el archivo.");
+        return Ok(());
+    }
+    
+    println!("Encontrados {} datasets:", datasets.len());
+    println!();
+    
+    for (i, dataset) in datasets.iter().enumerate() {
+        println!("{:3}. {}", i + 1, dataset);
+    }
+    
+    Ok(())
+}
+
+fn analyze_hecras_data(file_path: &str) -> Result<()> {
+    println!("Extrayendo datos de HEC-RAS de: {}", file_path);
+    println!("=" .repeat(60));
+    
+    let hecras_data = HDF5Analyzer::extract_hecras_data(file_path)
+        .with_context(|| format!("Error al extraer datos de HEC-RAS: {}", file_path))?;
+    
+    println!("Archivo: {}", hecras_data.file);
+    println!();
+    
+    // Mostrar resumen de extracción
+    println!("📊 RESUMEN DE EXTRACCIÓN:");
+    for (key, value) in &hecras_data.extraction_summary {
+        println!("  {}: {}", key, value);
+    }
+    println!();
+    
+    // Mostrar datos de geometría
+    if !hecras_data.geometry_data.is_empty() {
+        println!("🏗️  DATOS DE GEOMETRÍA:");
+        for (dataset_path, data) in &hecras_data.geometry_data {
+            println!("  📄 {}", dataset_path);
+            println!("     Elementos: {}", data.len());
+            if !data.is_empty() {
+                let sample_size = std::cmp::min(5, data.len());
+                println!("     Muestra: {:?}...", &data[..sample_size]);
+            }
+        }
+        println!();
+    }
+    
+    // Mostrar datos de resultados
+    if !hecras_data.results_data.is_empty() {
+        println!("📈 DATOS DE RESULTADOS:");
+        for (dataset_path, data) in &hecras_data.results_data {
+            println!("  📄 {}", dataset_path);
+            println!("     Elementos: {}", data.len());
+            if !data.is_empty() {
+                let sample_size = std::cmp::min(5, data.len());
+                println!("     Muestra: {:?}...", &data[..sample_size]);
+            }
+        }
+        println!();
+    }
+    
+    // Mostrar metadatos
+    if !hecras_data.metadata.is_empty() {
+        println!("📋 METADATOS:");
+        for (key, value) in &hecras_data.metadata {
+            println!("  {}: {}", key, value);
+        }
+    }
+    
+    Ok(())
+}
+
+fn read_dataset_sample(file_path: &str, dataset_path: &str, max_elements: usize) -> Result<()> {
+    println!("Leyendo muestra del dataset: {}", dataset_path);
+    println!("Archivo: {}", file_path);
+    println!("Elementos máximos: {}", max_elements);
+    println!("=" .repeat(60));
+    
+    let data = HDF5Analyzer::read_dataset_sample(file_path, dataset_path, max_elements)
+        .with_context(|| format!("Error al leer dataset: {}", dataset_path))?;
+    
+    println!("Elementos leídos: {}", data.len());
+    println!("Datos:");
+    
+    for (i, value) in data.iter().enumerate() {
+        println!("  [{:4}]: {:.6}", i, value);
+    }
+    
+    Ok(())
+}

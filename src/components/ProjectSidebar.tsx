@@ -62,6 +62,78 @@ function getHdfNodeIcon(hdfNode: HdfInternalStructure) {
   return <File className="h-4 w-4 text-gray-500" />;
 }
 
+function convertRasTreeToProjectTree(rasTree: any): ProjectTreeNode {
+  /**
+   * Convert ras-commander tree structure to ProjectTreeNode format
+   */
+  const convertNode = (
+    node: any,
+    parentPath: string = "",
+    index: number = 0
+  ): ProjectTreeNode => {
+    const nodeId = `${parentPath}/${node.name}-${node.type}-${index}`.replace(
+      /^\//,
+      ""
+    );
+
+    const projectNode: ProjectTreeNode = {
+      id: nodeId,
+      name: node.name,
+      type: mapRasTypeToProjectType(node.type),
+      children: [],
+    };
+
+    // Add metadata if available
+    if (node.metadata) {
+      projectNode.metadata = node.metadata;
+    }
+
+    // Add file info for HDF files
+    if (node.type === "hdf_file" || node.type === "hdf_results") {
+      projectNode.file_info = {
+        filename: node.name,
+        full_path: node.path || "",
+        size: node.metadata?.file_size || 0,
+        is_hdf: true,
+        can_process: true,
+        file_type: node.metadata?.file_type || "hdf",
+        has_results: node.metadata?.has_results || false,
+        has_geometry: node.metadata?.has_geometry || false,
+        cell_count: node.metadata?.cell_count,
+        size_mb: (node.metadata?.file_size || 0) / (1024 * 1024),
+      };
+    }
+
+    // Convert children recursively
+    if (node.children && Array.isArray(node.children)) {
+      projectNode.children = node.children.map(
+        (child: any, childIndex: number) =>
+          convertNode(child, nodeId, childIndex)
+      );
+    }
+
+    return projectNode;
+  };
+
+  return convertNode(rasTree, "", 0);
+}
+
+function mapRasTypeToProjectType(rasType: string): string {
+  const typeMap: Record<string, string> = {
+    project_root: "project",
+    category: "folder",
+    plan: "plan",
+    geometry: "geometry",
+    hdf_file: "hdf",
+    hdf_results: "hdf",
+    mesh_area: "mesh",
+    mesh_variable: "variable",
+    pipe_network: "pipe",
+  };
+
+  return typeMap[rasType] || rasType;
+}
+
 function formatFileSize(sizeMb: number): string {
   if (sizeMb < 1) {
     return `${(sizeMb * 1024).toFixed(0)} KB`;
@@ -162,6 +234,26 @@ export function ProjectSidebar({
   onBackToHome,
 }: ProjectSidebarProps) {
   const treeData = useMemo(() => {
+    // Check if we have ras-commander tree structure
+    if (projectData.tree_structure) {
+      console.log(
+        "🌳 Using ras-commander tree structure",
+        projectData.tree_structure
+      );
+      try {
+        const rasTree = convertRasTreeToProjectTree(projectData.tree_structure);
+        console.log("🔄 Converted ras tree:", rasTree);
+        const treeNode = convertToTreeNode(rasTree);
+        console.log("✅ Final tree node:", treeNode);
+        return [treeNode];
+      } catch (error) {
+        console.error("❌ Error converting ras tree:", error);
+        // Fallback to basic structure
+      }
+    }
+
+    // Fallback to basic tree structure
+    console.log("📁 Using basic tree structure");
     const rootNode: ProjectTreeNode = {
       id: "project-root",
       name: projectData.project_name,
@@ -221,7 +313,9 @@ export function ProjectSidebar({
       rootNode.children!.push(otherFolder);
     }
 
-    return [convertToTreeNode(rootNode)];
+    const finalTree = [convertToTreeNode(rootNode)];
+    console.log("📊 Final tree data:", finalTree);
+    return finalTree;
   }, [projectData]);
 
   const handleNodeClick = (node: TreeNode) => {
@@ -268,30 +362,44 @@ export function ProjectSidebar({
 
       {/* Project Tree */}
       <div className="flex-1 overflow-auto p-2 bg-background">
-        <TreeView
-          data={treeData}
-          onNodeClick={handleNodeClick}
-          defaultExpandedIds={["project-root"]}
-          showLines={true}
-          showIcons={true}
-          selectable={true}
-          multiSelect={false}
-          selectedIds={
-            selectedFile?.filename
-              ? [
-                  `geometry-${selectedFile.filename}`,
-                  `plan-${selectedFile.filename}`,
-                  `unsteady-${selectedFile.filename}`,
-                  `other-${selectedFile.filename}`,
-                ].filter((id) =>
-                  treeData[0]?.children?.some((folder) =>
-                    folder.children?.some((file) => file.id === id)
-                  )
-                )
-              : []
-          }
-          className="border-0 bg-transparent"
-        />
+        {treeData && treeData.length > 0 ? (
+          <TreeView
+            data={Array.isArray(treeData) ? treeData : [treeData]}
+            onNodeClick={handleNodeClick}
+            defaultExpandedIds={["project-root"]}
+            showLines={true}
+            showIcons={true}
+            selectable={true}
+            multiSelect={false}
+            selectedIds={
+              selectedFile?.filename
+                ? [
+                    `geometry-${selectedFile.filename}`,
+                    `plan-${selectedFile.filename}`,
+                    `unsteady-${selectedFile.filename}`,
+                    `other-${selectedFile.filename}`,
+                  ].filter((id) => {
+                    const dataArray = Array.isArray(treeData)
+                      ? treeData
+                      : [treeData];
+                    return dataArray[0]?.children?.some((folder) =>
+                      folder.children?.some((file) => file.id === id)
+                    );
+                  })
+                : []
+            }
+            className="border-0 bg-transparent"
+          />
+        ) : (
+          <div className="flex items-center justify-center h-32 text-muted-foreground">
+            <div className="text-center">
+              <p className="text-sm">No project data available</p>
+              <p className="text-xs mt-1">
+                Load a project to see the file structure
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Summary Footer */}
